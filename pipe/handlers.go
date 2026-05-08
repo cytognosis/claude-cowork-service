@@ -109,9 +109,11 @@ type createVMParams struct {
 }
 
 type startVMParams struct {
-	Name       string `json:"name"`
-	BundlePath string `json:"bundlePath"`
-	MemoryGB   int    `json:"memoryGB"`
+	Name        string `json:"name"`
+	BundlePath  string `json:"bundlePath"`
+	MemoryGB    int    `json:"memoryGB"`
+	CPUCount    int    `json:"cpuCount"`
+	APIProbeURL string `json:"apiProbeURL"`
 }
 
 type killParams struct {
@@ -131,7 +133,6 @@ type spawnParams struct {
 	AllowedDomains    []string             `json:"allowedDomains"`
 	OneShot           bool                 `json:"oneShot"`
 	MountSkeletonHome bool                 `json:"mountSkeletonHome"`
-	MountConda        string               `json:"mountConda"`
 }
 
 type getSessionsDiskInfoParams struct {
@@ -169,8 +170,12 @@ type readFileParams struct {
 }
 
 type oauthTokenParams struct {
-	Name  string `json:"name"`
 	Token string `json:"token"`
+}
+
+type installSdkParams struct {
+	SdkSubpath string `json:"sdkSubpath"`
+	Version    string `json:"version"`
 }
 
 type debugLoggingParams struct {
@@ -225,7 +230,7 @@ func (h *Handler) handleStartVM(conn net.Conn, req Request) {
 	if name == "" && p.BundlePath != "" {
 		name = filepath.Base(p.BundlePath)
 	}
-	if err := h.backend.StartVM(name); err != nil {
+	if err := h.backend.StartVM(name, p.BundlePath, p.MemoryGB); err != nil {
 		WriteError(conn, req.ID, -32000, err.Error())
 		return
 	}
@@ -368,16 +373,17 @@ func (h *Handler) handleReadFile(conn net.Conn, req Request) {
 		WriteError(conn, req.ID, -32000, err.Error())
 		return
 	}
+	// Desktop's Linux client reads `response.result.content`.
 	WriteResponse(conn, req.ID, map[string]interface{}{"content": string(data)})
 }
 
 func (h *Handler) handleInstallSdk(conn net.Conn, req Request) {
-	var p vmNameParams
+	var p installSdkParams
 	if err := json.Unmarshal(req.Params, &p); err != nil {
 		WriteError(conn, req.ID, -32602, "Invalid params: "+err.Error())
 		return
 	}
-	if err := h.backend.InstallSdk(p.Name); err != nil {
+	if err := h.backend.InstallSdk(p.SdkSubpath, p.Version); err != nil {
 		WriteError(conn, req.ID, -32000, err.Error())
 		return
 	}
@@ -390,7 +396,7 @@ func (h *Handler) handleAddApprovedOauthToken(conn net.Conn, req Request) {
 		WriteError(conn, req.ID, -32602, "Invalid params: "+err.Error())
 		return
 	}
-	if err := h.backend.AddApprovedOauthToken(p.Name, p.Token); err != nil {
+	if err := h.backend.AddApprovedOauthToken(p.Token); err != nil {
 		WriteError(conn, req.ID, -32000, err.Error())
 		return
 	}
